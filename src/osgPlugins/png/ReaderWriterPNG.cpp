@@ -15,7 +15,7 @@ using namespace osg;
 extern "C"
 {
     #include <zlib.h>
-    #include <png.h>
+    #include <libpng16/png.h>
 }
 
 
