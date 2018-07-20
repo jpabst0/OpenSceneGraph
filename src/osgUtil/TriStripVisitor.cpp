@@ -607,7 +607,7 @@ void TriStripVisitor::mergeTriangleStrips(osg::Geometry::PrimitiveSetList& primi
             osg::PrimitiveSet* ps = primitives[i].get();
             // remove null primitive sets and all primitives that have been merged
             // (i.e. all TRIANGLE_STRIP DrawElements)
-            if (!ps || (ps && ps->getMode() == osg::PrimitiveSet::TRIANGLE_STRIP))
+            if (ps && ps->getMode() == osg::PrimitiveSet::TRIANGLE_STRIP)
             {
                 primitives.erase(primitives.begin() + i);
             }
@@ -629,11 +629,7 @@ void TriStripVisitor::stripify()
     }
 }
 
-void TriStripVisitor::apply(Geode& geode)
+void TriStripVisitor::apply(Geometry& geom)
 {
-    for(unsigned int i = 0; i < geode.getNumDrawables(); ++i )
-    {
-        osg::Geometry* geom = dynamic_cast<osg::Geometry*>(geode.getDrawable(i));
-        if (geom) _geometryList.insert(geom);
-    }
+    _geometryList.insert(&geom);
 }

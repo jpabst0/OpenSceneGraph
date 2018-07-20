@@ -18,6 +18,7 @@
 #include <osg/Drawable>
 #include <osg/ApplicationUsage>
 #include <osg/ContextData>
+#include <osg/os_utils>
 
 #include <sstream>
 #include <algorithm>
@@ -50,6 +51,9 @@ State::State():
     _shaderComposer = new ShaderComposer;
     _currentShaderCompositionProgram = 0L;
 
+    _drawBuffer = GL_INVALID_ENUM; // avoid the lazy state mechanism from ignoreing the first call to State::glDrawBuffer() to make sure it's always passed to OpenGL
+    _readBuffer = GL_INVALID_ENUM; // avoid the lazy state mechanism from ignoreing the first call to State::glReadBuffer() to make sure it's always passed to OpenGL
+
     _identity = new osg::RefMatrix(); // default RefMatrix constructs to identity.
     _initialViewMatrix = _identity;
     _projection = _identity;
@@ -75,28 +79,39 @@ State::State():
 
     _checkGLErrors = ONCE_PER_FRAME;
 
-    const char* str = getenv("OSG_GL_ERROR_CHECKING");
-    if (str && (strcmp(str,"ONCE_PER_ATTRIBUTE")==0 || strcmp(str,"ON")==0 || strcmp(str,"on")==0))
+    std::string str;
+    if (getEnvVar("OSG_GL_ERROR_CHECKING", str))
     {
-        _checkGLErrors = ONCE_PER_ATTRIBUTE;
-    }
-    else if(str && (strcmp(str, "OFF") == 0 || strcmp(str, "off") == 0))
-    {
-        _checkGLErrors = NEVER_CHECK_GL_ERRORS;
+        if (str=="ONCE_PER_ATTRIBUTE" || str=="ON" || str=="on")
+        {
+            _checkGLErrors = ONCE_PER_ATTRIBUTE;
+        }
+        else if (str=="OFF" || str=="off")
+        {
+            _checkGLErrors = NEVER_CHECK_GL_ERRORS;
+        }
     }
 
     _currentActiveTextureUnit=0;
     _currentClientActiveTextureUnit=0;
 
     _currentPBO = 0;
+    _currentDIBO = 0;
+    _currentVAO = 0;
 
     _isSecondaryColorSupported = false;
     _isFogCoordSupported = false;
     _isVertexBufferObjectSupported = false;
     _isVertexArrayObjectSupported = false;
 
+#if OSG_GL3_FEATURES
+    _forceVertexBufferObject = true;
+    _forceVertexArrayObject = true;
+#else
     _forceVertexBufferObject = false;
     _forceVertexArrayObject = false;
+#endif
+
 
     _lastAppliedProgramObject = 0;
 
@@ -142,13 +157,23 @@ State::~State()
     // delete the GLExtensions object associated with this osg::State.
     if (_glExtensions)
     {
-        GLExtensions::Set(_contextID, 0);
         _glExtensions = 0;
+        GLExtensions* glExtensions = GLExtensions::Get(_contextID, false);
+        if (glExtensions && glExtensions->referenceCount() == 1) {
+            // the only reference left to the extension is in the static map itself, so we clean it up now
+            GLExtensions::Set(_contextID, 0);
+        }
     }
 
     //_texCoordArrayList.clear();
 
     //_vertexAttribArrayList.clear();
+}
+
+void State::setUseVertexAttributeAliasing(bool flag)
+{
+    _useVertexAttributeAliasing = flag;
+    if (_globalVertexArrayState.valid()) _globalVertexArrayState->assignAllDispatchers();
 }
 
 void State::initializeExtensionProcs()
@@ -166,20 +191,28 @@ void State::initializeExtensionProcs()
         _defineMap.changed = true;
     }
 
-    _glExtensions = new GLExtensions(_contextID);
-    GLExtensions::Set(_contextID, _glExtensions.get());
+    _glExtensions = GLExtensions::Get(_contextID, true);
 
     _isSecondaryColorSupported = osg::isGLExtensionSupported(_contextID,"GL_EXT_secondary_color");
     _isFogCoordSupported = osg::isGLExtensionSupported(_contextID,"GL_EXT_fog_coord");
-    _isVertexBufferObjectSupported = OSG_GLES2_FEATURES || OSG_GL3_FEATURES || osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_buffer_object");
+    _isVertexBufferObjectSupported = OSG_GLES2_FEATURES || OSG_GLES3_FEATURES || OSG_GL3_FEATURES || osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_buffer_object");
     _isVertexArrayObjectSupported = _glExtensions->isVAOSupported;
 
     const DisplaySettings* ds = getDisplaySettings() ? getDisplaySettings() : osg::DisplaySettings::instance().get();
-    _forceVertexArrayObject = _isVertexArrayObjectSupported && (ds->getVertexBufferHint()==DisplaySettings::VERTEX_ARRAY_OBJECT);
-    _forceVertexBufferObject = _forceVertexArrayObject || (_isVertexBufferObjectSupported && (ds->getVertexBufferHint()==DisplaySettings::VERTEX_BUFFER_OBJECT));
 
-    OSG_NOTICE<<"_forceVertexArrayObject = "<<_forceVertexArrayObject<<std::endl;
-    OSG_NOTICE<<"_forceVertexBufferObject = "<<_forceVertexBufferObject<<std::endl;
+    if (ds->getVertexBufferHint()==DisplaySettings::VERTEX_BUFFER_OBJECT)
+    {
+        _forceVertexBufferObject = true;
+        _forceVertexArrayObject = false;
+    }
+    else if (ds->getVertexBufferHint()==DisplaySettings::VERTEX_ARRAY_OBJECT)
+    {
+        _forceVertexBufferObject = true;
+        _forceVertexArrayObject = true;
+    }
+
+    OSG_INFO<<"osg::State::initializeExtensionProcs() _forceVertexArrayObject = "<<_forceVertexArrayObject<<std::endl;
+    OSG_INFO<<"                                       _forceVertexBufferObject = "<<_forceVertexBufferObject<<std::endl;
 
 
     // Set up up global VertexArrayState object
@@ -187,7 +220,7 @@ void State::initializeExtensionProcs()
     _globalVertexArrayState->assignAllDispatchers();
     // if (_useVertexArrayObject) _globalVertexArrayState->generateVertexArrayObject();
 
-    setCurrentToGloabalVertexArrayState();
+    setCurrentToGlobalVertexArrayState();
 
 
     setGLExtensionFuncPtr(_glClientActiveTexture,"glClientActiveTexture","glClientActiveTextureARB");
@@ -207,7 +240,7 @@ void State::initializeExtensionProcs()
     setGLExtensionFuncPtr(_glDrawArraysInstanced, "glDrawArraysInstanced","glDrawArraysInstancedARB","glDrawArraysInstancedEXT");
     setGLExtensionFuncPtr(_glDrawElementsInstanced, "glDrawElementsInstanced","glDrawElementsInstancedARB","glDrawElementsInstancedEXT");
 
-    if (osg::getGLVersionNumber() >= 2.0 || osg::isGLExtensionSupported(_contextID, "GL_ARB_vertex_shader") || OSG_GLES2_FEATURES || OSG_GL3_FEATURES)
+    if (osg::getGLVersionNumber() >= 2.0 || osg::isGLExtensionSupported(_contextID, "GL_ARB_vertex_shader") || OSG_GLES2_FEATURES || OSG_GLES3_FEATURES || OSG_GL3_FEATURES)
     {
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&_glMaxTextureUnits);
         #ifdef OSG_GL_FIXED_FUNCTION_AVAILABLE
@@ -346,7 +379,7 @@ void State::reset()
         as.changed = true;
     }
 
-    // we can do a straight clear, we arn't interested in GL_DEPTH_TEST defaults in texture modes.
+    // we can do a straight clear, we aren't interested in GL_DEPTH_TEST defaults in texture modes.
     for(TextureModeMapList::iterator tmmItr=_textureModeMapList.begin();
         tmmItr!=_textureModeMapList.end();
         ++tmmItr)
@@ -408,6 +441,28 @@ void State::reset()
         us.uniformVec.clear();
     }
 
+}
+
+void State::glDrawBuffer(GLenum buffer)
+{
+    if (_drawBuffer!=buffer)
+    {
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GLES3_AVAILABLE)
+        ::glDrawBuffer(buffer);
+        #endif
+        _drawBuffer=buffer;
+    }
+}
+
+void State::glReadBuffer(GLenum buffer)
+{
+    if (_readBuffer!=buffer)
+    {
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GLES3_AVAILABLE)
+        ::glReadBuffer(buffer);
+        #endif
+        _readBuffer=buffer;
+    }
 }
 
 void State::setInitialViewMatrix(const osg::RefMatrix* matrix)
@@ -1075,7 +1130,7 @@ unsigned int State::getClientActiveTextureUnit() const
 }
 
 
-bool State::checkGLErrors(const char* str) const
+bool State::checkGLErrors(const char* str1, const char* str2) const
 {
     GLenum errorNo = glGetError();
     if (errorNo!=GL_NO_ERROR)
@@ -1091,14 +1146,18 @@ bool State::checkGLErrors(const char* str) const
             OSG_NOTIFY(notifyLevel)<<"Warning: detected OpenGL error number 0x" << std::hex << errorNo << std::dec;
         }
 
-        if (str)
+        if (str1 || str2)
         {
-            OSG_NOTIFY(notifyLevel)<<" at "<<str<< std::endl;
+            OSG_NOTIFY(notifyLevel)<<" at";
+            if (str1) { OSG_NOTIFY(notifyLevel)<<" "<<str1; }
+            if (str2) { OSG_NOTIFY(notifyLevel)<<" "<<str2; }
         }
         else
         {
-            OSG_NOTIFY(notifyLevel)<<" in osg::State."<< std::endl;
+            OSG_NOTIFY(notifyLevel)<<" in osg::State.";
         }
+
+        OSG_NOTIFY(notifyLevel)<< std::endl;
 
         return true;
     }
@@ -1192,18 +1251,78 @@ namespace State_Utils
             source.insert(declPos, qualifier + declarationPrefix + newStr + std::string(";\n"));
         }
     }
+
+    void replaceVar(const osg::State& state, std::string& str, std::string::size_type start_pos,  std::string::size_type num_chars)
+    {
+        std::string var_str(str.substr(start_pos+1, num_chars-1));
+        std::string value;
+        if (state.getActiveDisplaySettings()->getValue(var_str, value))
+        {
+            str.replace(start_pos, num_chars, value);
+        }
+        else
+        {
+            str.erase(start_pos, num_chars);
+        }
+    }
+
+
+    void substitudeEnvVars(const osg::State& state, std::string& str)
+    {
+        std::string::size_type pos = 0;
+        while (pos<str.size() && ((pos=str.find_first_of("$'\"", pos)) != std::string::npos))
+        {
+            if (pos==str.size())
+            {
+                break;
+            }
+
+            if (str[pos]=='"' || str[pos]=='\'')
+            {
+                std::string::size_type start_quote = pos;
+                ++pos; // skip over first quote
+                pos = str.find(str[start_quote], pos);
+
+                if (pos!=std::string::npos)
+                {
+                    ++pos; // skip over second quote
+                }
+            }
+            else
+            {
+                std::string::size_type start_var = pos;
+                ++pos;
+                pos = str.find_first_not_of("ABCDEFGHIJKLMNOPQRTSUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_", pos);
+                if (pos != std::string::npos)
+                {
+
+                    replaceVar(state, str, start_var, pos-start_var);
+                    pos = start_var;
+                }
+                else
+                {
+                    replaceVar(state, str, start_var, str.size()-start_var);
+                    pos = start_var;
+                }
+            }
+        }
+    }
 }
 
 bool State::convertVertexShaderSourceToOsgBuiltIns(std::string& source) const
 {
-    OSG_INFO<<"State::convertShaderSourceToOsgBuiltIns()"<<std::endl;
+    OSG_DEBUG<<"State::convertShaderSourceToOsgBuiltIns()"<<std::endl;
 
-    OSG_INFO<<"++Before Converted source "<<std::endl<<source<<std::endl<<"++++++++"<<std::endl;
+    OSG_DEBUG<<"++Before Converted source "<<std::endl<<source<<std::endl<<"++++++++"<<std::endl;
+
+
+    State_Utils::substitudeEnvVars(*this, source);
+
 
     std::string attributeQualifier("attribute ");
 
     // find the first legal insertion point for replacement declarations. GLSL requires that nothing
-    // precede a "#verson" compiler directive, so we must insert new declarations after it.
+    // precede a "#version" compiler directive, so we must insert new declarations after it.
     std::string::size_type declPos = source.rfind( "#version " );
     if ( declPos != std::string::npos )
     {
@@ -1222,6 +1341,13 @@ bool State::convertVertexShaderSourceToOsgBuiltIns(std::string& source) const
         declPos = 0;
     }
 
+    std::string::size_type extPos = source.rfind( "#extension " );
+    if ( extPos != std::string::npos )
+    {
+        // found the string, now find the next linefeed and set the insertion point after it.
+        declPos = source.find( '\n', extPos );
+        declPos = declPos != std::string::npos ? declPos+1 : source.length();
+    }
     if (_useModelViewAndProjectionUniforms)
     {
         // replace ftransform as it only works with built-ins
@@ -1248,7 +1374,7 @@ bool State::convertVertexShaderSourceToOsgBuiltIns(std::string& source) const
         }
     }
 
-    OSG_INFO<<"-------- Converted source "<<std::endl<<source<<std::endl<<"----------------"<<std::endl;
+    OSG_DEBUG<<"-------- Converted source "<<std::endl<<source<<std::endl<<"----------------"<<std::endl;
 
     return true;
 }
@@ -1617,7 +1743,7 @@ std::string State::getDefineString(const osg::ShaderDefines& shaderDefines)
             shaderDefineStr += cd_itr->first;
             if (!dp.first.empty())
             {
-                shaderDefineStr += " ";
+                if (dp.first[0]!='(') shaderDefineStr += " ";
                 shaderDefineStr += dp.first;
             }
 #ifdef WIN32

@@ -307,6 +307,13 @@ Registry::Registry()
     addFileExtensionAlias("vert", "glsl");
     addFileExtensionAlias("frag", "glsl");
     addFileExtensionAlias("geom", "glsl");
+    addFileExtensionAlias("tctrl", "glsl");
+    addFileExtensionAlias("teval", "glsl");
+    addFileExtensionAlias("compute", "glsl");
+    addFileExtensionAlias("vs", "glsl");
+    addFileExtensionAlias("fs", "glsl");
+    addFileExtensionAlias("cs", "glsl");
+    addFileExtensionAlias("gs", "glsl");
 
     addFileExtensionAlias("js", "V8");
 
@@ -444,6 +451,11 @@ Registry::Registry()
     addFileExtensionAlias("modified", "revisions");
 
 
+    // STEP/IGES file mappings
+    addFileExtensionAlias("stp",  "opencascade");
+    addFileExtensionAlias("step", "opencascade");
+    addFileExtensionAlias("igs",  "opencascade");
+    addFileExtensionAlias("iges", "opencascade");
 
 
     // add built-in mime-type extension mappings
@@ -570,7 +582,7 @@ void Registry::readCommandLine(osg::ArgumentParser& arguments)
     std::string value;
     while(arguments.read("-l",value))
     {
-        if (loadLibrary(value)!=NOT_LOADED)
+        if (loadLibrary(value)==NOT_LOADED)
         {
             OSG_NOTICE<<"Unable to load library : "<<value<<std::endl;
         }
@@ -579,7 +591,7 @@ void Registry::readCommandLine(osg::ArgumentParser& arguments)
     while(arguments.read("-e",value))
     {
         std::string libName = createLibraryNameForExtension(value);
-        if (loadLibrary(libName)!=NOT_LOADED)
+        if (loadLibrary(libName)==NOT_LOADED)
         {
             OSG_NOTICE<<"Unable to load library : "<<libName<<std::endl;
         }
@@ -1156,7 +1168,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
 
             options->setDatabasePath(archiveName);
 
-            std::auto_ptr<ReadFunctor> rf(readFunctor.cloneType(fileName, options.get()));
+            osg::ref_ptr<ReadFunctor> rf(readFunctor.cloneType(fileName, options.get()));
 
             result = rf->doRead(*archive);
 

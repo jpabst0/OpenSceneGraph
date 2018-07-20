@@ -152,19 +152,19 @@ class OSG_EXPORT State : public Referenced
             _extensionMap[id] = ptr;
         }
 
-        /* Set whether shader composition is enabled.*/
+        /* deprecated.*/
         void setShaderCompositionEnabled(bool flag) { _shaderCompositionEnabled = flag; }
 
-        /* Get whether shader composition is enabled.*/
+        /* deprecated.*/
         bool getShaderCompositionEnabled() const { return _shaderCompositionEnabled; }
 
-        /** Set the ShaderComposor object that implements shader composition.*/
+        /** deprecated.*/
         void setShaderComposer(ShaderComposer* sc) { _shaderComposer = sc; }
 
-        /** Get the ShaderComposor object.*/
+        /** deprecated.*/
         ShaderComposer* getShaderComposer() { return _shaderComposer.get(); }
 
-        /** Get the const ShaderComposor object.*/
+        /** deprecated.*/
         const ShaderComposer* getShaderComposer() const { return _shaderComposer.get(); }
 
         /** Get the unform list in which to inject any uniforms that StateAttribute::apply(State&) methods provide.*/
@@ -252,7 +252,7 @@ class OSG_EXPORT State : public Referenced
         Polytope getViewFrustum() const;
 
 
-        void setUseVertexAttributeAliasing(bool flag) { _useVertexAttributeAliasing = flag; }
+        void setUseVertexAttributeAliasing(bool flag);
         bool getUseVertexAttributeAliasing() const { return _useVertexAttributeAliasing ; }
 
         typedef std::vector<VertexAttribAlias> VertexAttribAliasList;
@@ -302,6 +302,14 @@ class OSG_EXPORT State : public Referenced
 
         /** Apply any shader composed state.*/
         void applyShaderComposition();
+
+
+        void glDrawBuffer(GLenum buffer);
+        GLenum getDrawBuffer() const { return _drawBuffer; }
+
+        void glReadBuffer(GLenum buffer);
+        GLenum getReadBuffer() const { return _readBuffer; }
+
 
         /** Set whether a particular OpenGL mode is valid in the current graphics context.
           * Use to disable OpenGL modes that are not supported by current graphics drivers/context.*/
@@ -528,7 +536,7 @@ class OSG_EXPORT State : public Referenced
         struct SetCurrentVertexArrayStateProxy
         {
             SetCurrentVertexArrayStateProxy(osg::State& state, VertexArrayState* vas):_state(state) { _state.setCurrentVertexArrayState(vas); }
-            ~SetCurrentVertexArrayStateProxy() { _state.setCurrentToGloabalVertexArrayState(); }
+            ~SetCurrentVertexArrayStateProxy() { _state.setCurrentToGlobalVertexArrayState(); }
             osg::State& _state;
         };
 
@@ -538,8 +546,8 @@ class OSG_EXPORT State : public Referenced
         /** Get the CurrentVetexArrayState object that take which vertex arrays are bound.*/
         VertexArrayState* getCurrentVertexArrayState() const { return _vas; }
 
-        /** Set the getCurrentVertexArrayState to the GloabalVertexArrayState.*/
-        void setCurrentToGloabalVertexArrayState() { _vas = _globalVertexArrayState.get(); }
+        /** Set the getCurrentVertexArrayState to the GlobalVertexArrayState.*/
+        void setCurrentToGlobalVertexArrayState() { _vas = _globalVertexArrayState.get(); }
 
 
         /** disable the vertex, normal, color, tex coords, secondary color, fog coord and index arrays.*/
@@ -563,7 +571,7 @@ class OSG_EXPORT State : public Referenced
 
 
         void setCurrentPixelBufferObject(osg::GLBufferObject* pbo) { _currentPBO = pbo; }
-        const GLBufferObject* getCurrentPixelBufferObject() { return _currentPBO; }
+        const GLBufferObject* getCurrentPixelBufferObject() const { return _currentPBO; }
 
         inline void bindPixelBufferObject(osg::GLBufferObject* pbo)
         {
@@ -589,6 +597,38 @@ class OSG_EXPORT State : public Referenced
             _glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB,0);
             _currentPBO = 0;
         }
+
+
+        inline void bindDrawIndirectBufferObject(osg::GLBufferObject* ibo)
+        {
+            if (ibo->isDirty())
+            {
+                ibo->compileBuffer();
+                _currentDIBO = ibo;
+            }
+            else if (ibo != _currentDIBO)
+            {
+                ibo->bindBuffer();
+                _currentDIBO = ibo;
+            }
+        }
+
+        inline void unbindDrawIndirectBufferObject()
+        {
+            if (!_currentDIBO) return;
+            _glBindBuffer(GL_DRAW_INDIRECT_BUFFER,0);
+            _currentDIBO = 0;
+        }
+
+        void setCurrentVertexArrayObject(GLuint vao) { _currentVAO = vao; }
+        GLuint getCurrentVertexArrayObject() const { return _currentVAO; }
+
+        inline void bindVertexArrayObject(const VertexArrayState* vas) { bindVertexArrayObject(vas->getVertexArrayObject()); }
+
+        inline void bindVertexArrayObject(GLuint vao) { if (_currentVAO!=vao) { _glExtensions->glBindVertexArray(vao); _currentVAO = vao; } }
+
+        inline void unbindVertexArrayObject() { if (_currentVAO!=0) { _glExtensions->glBindVertexArray(0); _currentVAO = 0; } }
+
 
         typedef std::vector<GLushort> IndicesGLushort;
         IndicesGLushort _quadIndicesGLushort[4];
@@ -791,9 +831,14 @@ class OSG_EXPORT State : public Referenced
           * during rendering. */
         inline void setDisplaySettings(DisplaySettings* vs) { _displaySettings = vs; }
 
-        /** Get the DisplaySettings */
+        /** Get the const DisplaySettings */
         inline const DisplaySettings* getDisplaySettings() const { return _displaySettings.get(); }
 
+        /** Get the DisplaySettings that is current active DisplaySettings to be used by osg::State, - if DisplaySettings is not directly assigned then fallback to DisplaySettings::instance(). */
+        inline DisplaySettings* getActiveDisplaySettings() { return _displaySettings.valid() ? _displaySettings.get() : osg::DisplaySettings::instance().get(); }
+
+        /** Get the const DisplaySettings that is current active DisplaySettings to be used by osg::State, - if DisplaySettings is not directly assigned then fallback to DisplaySettings::instance(). */
+        inline const DisplaySettings* getActiveDisplaySettings() const { return _displaySettings.valid() ? _displaySettings.get() : osg::DisplaySettings::instance().get(); }
 
 
         /** Set flag for early termination of the draw traversal.*/
@@ -870,7 +915,7 @@ class OSG_EXPORT State : public Referenced
         /** Get whether and how often OpenGL errors should be checked for.*/
         CheckForGLErrors getCheckForGLErrors() const { return _checkGLErrors; }
 
-        bool checkGLErrors(const char* str) const;
+        bool checkGLErrors(const char* str1=0, const char* str2=0) const;
         bool checkGLErrors(StateAttribute::GLMode mode) const;
         bool checkGLErrors(const StateAttribute* attribute) const;
 
@@ -1043,6 +1088,9 @@ class OSG_EXPORT State : public Referenced
         StateSet::UniformList           _currentShaderCompositionUniformList;
 
         ref_ptr<FrameStamp>         _frameStamp;
+
+        GLenum                      _drawBuffer;
+        GLenum                      _readBuffer;
 
         ref_ptr<const RefMatrix>    _identity;
         ref_ptr<const RefMatrix>    _initialViewMatrix;
@@ -1248,6 +1296,8 @@ class OSG_EXPORT State : public Referenced
         unsigned int                    _currentActiveTextureUnit;
         unsigned int                    _currentClientActiveTextureUnit;
         GLBufferObject*                 _currentPBO;
+        GLBufferObject*                 _currentDIBO;
+        GLuint                          _currentVAO;
 
 
         inline ModeMap& getOrCreateTextureModeMap(unsigned int unit)
@@ -1468,7 +1518,7 @@ inline void State::pushDefineList(DefineMap& defineMap,const StateSet::DefineLis
             dv.push_back(StateSet::DefinePair(aitr->second.first,aitr->second.second));
 
             // if the back of the stack has changed since the last then mark it as changed.
-            bool changed = (dv[dv.size()-2].first==dv[dv.size()-1].first);
+            bool changed = (dv[dv.size()-2] != dv.back());
             if (changed)
             {
                 ds.changed = true;
@@ -1537,7 +1587,7 @@ inline void State::popDefineList(DefineMap& defineMap,const StateSet::DefineList
         if (!dv.empty())
         {
             // if the stack has less than 2 entries or new back vs old back are different then mark the DefineStack as changed
-            if ((dv.size()<2) || (dv[dv.size()-2].first!=dv.back().first))
+            if ((dv.size() < 2) || (dv[dv.size()-2] != dv.back()))
             {
                 ds.changed = true;
                 defineMap.changed = true;

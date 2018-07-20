@@ -241,21 +241,26 @@ void Texture3D::apply(State& state) const
         // we have a valid image
         textureObject->bind();
 
-        if (getTextureParameterDirty(state.getContextID())) applyTexParameters(GL_TEXTURE_3D,state);
-
         if (_subloadCallback.valid())
         {
+            applyTexParameters(GL_TEXTURE_3D,state);
+
             _subloadCallback->subload(*this,state);
         }
         else if (_image.get() && getModifiedCount(contextID) != _image->getModifiedCount())
         {
-           computeRequiredTextureDimensions(state,*_image,_textureWidth, _textureHeight, _textureDepth,_numMipmapLevels);
-
-            applyTexImage3D(GL_TEXTURE_3D,_image.get(),state, _textureWidth, _textureHeight, _textureDepth,_numMipmapLevels);
-
             // update the modified count to show that it is up to date.
             getModifiedCount(contextID) = _image->getModifiedCount();
+
+            applyTexParameters(GL_TEXTURE_3D,state);
+
+            computeRequiredTextureDimensions(state,*_image,_textureWidth, _textureHeight, _textureDepth,_numMipmapLevels);
+
+            applyTexImage3D(GL_TEXTURE_3D,_image.get(),state, _textureWidth, _textureHeight, _textureDepth,_numMipmapLevels);
         }
+
+        if (getTextureParameterDirty(state.getContextID()))
+            applyTexParameters(GL_TEXTURE_3D,state);
 
     }
     else if (_subloadCallback.valid())
@@ -291,15 +296,14 @@ void Texture3D::apply(State& state) const
 
         textureObject->bind();
 
+        // update the modified count to show that it is up to date.
+        getModifiedCount(contextID) = _image->getModifiedCount();
 
         applyTexParameters(GL_TEXTURE_3D,state);
 
         applyTexImage3D(GL_TEXTURE_3D,_image.get(),state, _textureWidth, _textureHeight, _textureDepth,_numMipmapLevels);
 
         textureObject->setAllocated(_numMipmapLevels,_internalFormat,_textureWidth,_textureHeight,_textureDepth,0);
-
-        // update the modified count to show that it is up to date.
-        getModifiedCount(contextID) = _image->getModifiedCount();
 
         // unref image data?
         if (isSafeToUnrefImageData(state) && _image->getDataVariance()==STATIC)

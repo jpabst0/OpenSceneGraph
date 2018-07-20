@@ -204,10 +204,10 @@ void TextureRectangle::apply(State& state) const
         }
         else if (_image.valid() && getModifiedCount(contextID) != _image->getModifiedCount())
         {
-            applyTexImage_subload(GL_TEXTURE_RECTANGLE, _image.get(), state, _textureWidth, _textureHeight, _internalFormat);
-
             // update the modified count to show that it is up to date.
             getModifiedCount(contextID) = _image->getModifiedCount();
+
+            applyTexImage_subload(GL_TEXTURE_RECTANGLE, _image.get(), state, _textureWidth, _textureHeight, _internalFormat);
         }
     }
     else if (_subloadCallback.valid())
@@ -321,7 +321,7 @@ void TextureRectangle::applyTexImage_load(GLenum target, Image* image, State& st
     {
         glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE,GL_TRUE);
 
-        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GLES3_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
             glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_PRIORITY,0.0f);
         #endif
 

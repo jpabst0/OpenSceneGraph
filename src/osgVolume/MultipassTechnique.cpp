@@ -497,6 +497,7 @@ void MultipassTechnique::init()
     {
         geometryMatrix = masterLocator->getTransform();
         _transform->setMatrix(geometryMatrix);
+        masterLocator->applyAppropriateFrontFace(_transform->getOrCreateStateSet());
         masterLocator->addCallback(new TransformLocatorCallback(_transform.get()));
     }
 
@@ -926,33 +927,6 @@ void MultipassTechnique::backfaceSubgraphCullTraversal(osgUtil::CullVisitor* cv)
 
     cv->popStateSet();
 }
-
-class RTTBackfaceCameraCullCallback : public osg::NodeCallback
-{
-    public:
-
-        RTTBackfaceCameraCullCallback(MultipassTechnique::MultipassTileData* tileData, MultipassTechnique* mt):
-            _tileData(tileData),
-            _mt(mt) {}
-
-        virtual void operator()(osg::Node* /*node*/, osg::NodeVisitor* nv)
-        {
-            osgUtil::CullVisitor* cv = nv->asCullVisitor();
-
-            cv->pushProjectionMatrix(_tileData->projectionMatrix.get());
-
-            _mt->backfaceSubgraphCullTraversal(cv);
-
-            cv->popProjectionMatrix();
-        }
-
-    protected:
-
-        virtual ~RTTBackfaceCameraCullCallback() {}
-
-        osg::observer_ptr<osgVolume::MultipassTechnique::MultipassTileData> _tileData;
-        osg::observer_ptr<osgVolume::MultipassTechnique> _mt;
-};
 
 class ShadingModelVisitor : public osgVolume::PropertyVisitor
 {

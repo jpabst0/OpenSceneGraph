@@ -193,26 +193,29 @@ void Texture2D::apply(State& state) const
     {
         textureObject->bind();
 
-        if (getTextureParameterDirty(state.getContextID()))
-            applyTexParameters(GL_TEXTURE_2D,state);
-
         if (_subloadCallback.valid())
         {
+            applyTexParameters(GL_TEXTURE_2D,state);
+
             _subloadCallback->subload(*this,state);
         }
         else if (_image.valid() && getModifiedCount(contextID) != _image->getModifiedCount())
         {
-            applyTexImage2D_subload(state,GL_TEXTURE_2D,_image.get(),
-                                    _textureWidth, _textureHeight, _internalFormat, _numMipmapLevels);
-
             // update the modified tag to show that it is up to date.
             getModifiedCount(contextID) = _image->getModifiedCount();
 
+            applyTexParameters(GL_TEXTURE_2D,state);
+
+            applyTexImage2D_subload(state,GL_TEXTURE_2D,_image.get(),
+                                    _textureWidth, _textureHeight, _internalFormat, _numMipmapLevels);
         }
         else if (_readPBuffer.valid())
         {
             _readPBuffer->bindPBufferToTexture(GL_FRONT);
         }
+
+        if (getTextureParameterDirty(state.getContextID()))
+            applyTexParameters(GL_TEXTURE_2D,state);
 
     }
     else if (_subloadCallback.valid())
@@ -223,6 +226,8 @@ void Texture2D::apply(State& state) const
         textureObject->bind();
 
         applyTexParameters(GL_TEXTURE_2D,state);
+
+        if (_image.valid()) getModifiedCount(contextID) = _image->getModifiedCount();
 
         _subloadCallback->load(*this,state);
 
@@ -235,7 +240,6 @@ void Texture2D::apply(State& state) const
         //glBindTexture( GL_TEXTURE_2D, handle );
 
         // update the modified tag to show that it is up to date.
-        if (_image.valid()) getModifiedCount(contextID) = _image->getModifiedCount();
     }
     else if (_image.valid() && _image->data())
     {
@@ -255,6 +259,9 @@ void Texture2D::apply(State& state) const
 
         applyTexParameters(GL_TEXTURE_2D,state);
 
+        // update the modified tag to show that it is up to date.
+        getModifiedCount(contextID) = image->getModifiedCount();
+
         if (textureObject->isAllocated() && image->supportsTextureSubloading())
         {
             //OSG_NOTICE<<"Reusing texture object"<<std::endl;
@@ -269,9 +276,6 @@ void Texture2D::apply(State& state) const
 
             textureObject->setAllocated(true);
         }
-
-        // update the modified tag to show that it is up to date.
-        getModifiedCount(contextID) = image->getModifiedCount();
 
         // unref image data?
         if (isSafeToUnrefImageData(state) && image->getDataVariance()==STATIC)
@@ -313,7 +317,7 @@ void Texture2D::apply(State& state) const
         glBindTexture( GL_TEXTURE_2D, 0 );
     }
 
-        // if texture object is now valid and we have to allocate mipmap levels, then
+    // if texture object is now valid and we have to allocate mipmap levels, then
     if (textureObject != 0 && _texMipmapGenerationDirtyList[contextID])
     {
         generateMipmap(state);
