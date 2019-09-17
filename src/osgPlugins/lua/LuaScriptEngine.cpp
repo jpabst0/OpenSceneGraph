@@ -32,32 +32,40 @@ public:
 
     virtual bool run(osg::Object* object, osg::Parameters& inputParameters, osg::Parameters& outputParameters) const
     {
-        int topBeforeCall = lua_gettop(_lse->getLuaState());
+		osg::ref_ptr<const LuaScriptEngine> lse;
 
-        lua_rawgeti(_lse->getLuaState(), LUA_REGISTRYINDEX, _ref);
+		if (!_lse.lock(lse))
+		{
+			OSG_NOTICE<<"Call to expired Lua callback"<<std::endl;
+			return false;
+		}
+
+        int topBeforeCall = lua_gettop(lse->getLuaState());
+
+        lua_rawgeti(lse->getLuaState(), LUA_REGISTRYINDEX, _ref);
 
         int numInputs = 1;
-        _lse->pushParameter(object);
+        lse->pushParameter(object);
 
         for(osg::Parameters::iterator itr = inputParameters.begin();
             itr != inputParameters.end();
             ++itr)
         {
-            _lse->pushParameter(itr->get());
+            lse->pushParameter(itr->get());
             ++numInputs;
         }
 
-        if (lua_pcall(_lse->getLuaState(), numInputs, LUA_MULTRET,0)!=0)
+        if (lua_pcall(lse->getLuaState(), numInputs, LUA_MULTRET,0)!=0)
         {
-            OSG_NOTICE<<"Lua error : "<<lua_tostring(_lse->getLuaState(), -1)<<std::endl;
+            OSG_NOTICE<<"Lua error : "<<lua_tostring(lse->getLuaState(), -1)<<std::endl;
             return false;
         }
 
-        int topAfterCall = lua_gettop(_lse->getLuaState());
+        int topAfterCall = lua_gettop(lse->getLuaState());
         int numReturns = topAfterCall-topBeforeCall;
         for(int i=1; i<=numReturns; ++i)
         {
-            outputParameters.insert(outputParameters.begin(), _lse->popParameterObject());
+            outputParameters.insert(outputParameters.begin(), lse->popParameterObject());
         }
         return true;
     }
@@ -66,7 +74,7 @@ public:
 
 protected:
 
-    osg::ref_ptr<const LuaScriptEngine> _lse;
+    osg::observer_ptr<const LuaScriptEngine> _lse;
     int _ref;
 };
 
