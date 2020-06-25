@@ -62,14 +62,14 @@ void Uniform::addParent(osg::StateSet* object)
 {
     OSG_DEBUG_FP<<"Uniform Adding parent"<<std::endl;
 
-    OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
+    //OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
 
     _parents.push_back(object);
 }
 
 void Uniform::removeParent(osg::StateSet* object)
 {
-    OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
+    //OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
 
     ParentList::iterator pitr = std::find(_parents.begin(),_parents.end(),object);
     if (pitr!=_parents.end()) _parents.erase(pitr);

@@ -98,14 +98,14 @@ Node::~Node()
 
 void Node::addParent(osg::Group* parent)
 {
-    OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
+    //OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
 
     _parents.push_back(parent);
 }
 
 void Node::removeParent(osg::Group* parent)
 {
-    OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
+    //OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
 
     ParentList::iterator pitr = std::find(_parents.begin(), _parents.end(), parent);
     if (pitr!=_parents.end()) _parents.erase(pitr);

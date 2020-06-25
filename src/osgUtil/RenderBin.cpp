@@ -26,7 +26,7 @@
 using namespace osg;
 using namespace osgUtil;
 
-class RenderBinPrototypeList : osg::depends_on<OpenThreads::Mutex*, osg::Referenced::getGlobalReferencedMutex>,
+class RenderBinPrototypeList : //osg::depends_on<OpenThreads::Mutex*, osg::Referenced::getGlobalReferencedMutex>,
                                public osg::Referenced, public std::map< std::string, osg::ref_ptr<RenderBin> >
 {
     public:
