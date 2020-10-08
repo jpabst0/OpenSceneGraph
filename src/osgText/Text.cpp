@@ -102,6 +102,7 @@ osg::StateSet* Text::createStateSet()
     Font::StateSets& statesets = activeFont->getCachedStateSets();
 
     std::stringstream ss;
+    ss.imbue(std::locale::classic());
     ss<<std::fixed<<std::setprecision(3);
 
     osg::StateSet::DefineList defineList;
@@ -1341,6 +1342,8 @@ void Text::setBackdropType(BackdropType type)
 
 void Text::setBackdropOffset(float offset)
 {
+    if (_backdropHorizontalOffset == offset && _backdropVerticalOffset == offset) return;
+
     _backdropHorizontalOffset = offset;
     _backdropVerticalOffset = offset;
 
@@ -1351,6 +1354,8 @@ void Text::setBackdropOffset(float offset)
 
 void Text::setBackdropOffset(float horizontal, float vertical)
 {
+    if (_backdropHorizontalOffset == horizontal && _backdropVerticalOffset == vertical) return;
+
     _backdropHorizontalOffset = horizontal;
     _backdropVerticalOffset = vertical;
 
@@ -1361,6 +1366,8 @@ void Text::setBackdropOffset(float horizontal, float vertical)
 
 void Text::setBackdropColor(const osg::Vec4& color)
 {
+    if (_backdropColor==color) return;
+
     _backdropColor = color;
 
     assignStateSet();

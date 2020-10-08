@@ -14,6 +14,7 @@
 #include "LuaScriptEngine.h"
 
 #include <osg/io_utils>
+#include <osg/observer_ptr>
 #include <osgDB/ReadFile>
 #include <osgDB/WriteFile>
 
@@ -32,13 +33,15 @@ public:
 
     virtual bool run(osg::Object* object, osg::Parameters& inputParameters, osg::Parameters& outputParameters) const
     {
-		osg::ref_ptr<const LuaScriptEngine> lse;
-
-		if (!_lse.lock(lse))
-		{
-			OSG_NOTICE<<"Call to expired Lua callback"<<std::endl;
-			return false;
-		}
+        if (!_lse)
+        {
+            OSG_NOTICE << "Warning: Ignoring call to Lua by an expired callback" << std::endl;
+            return false;
+        }
+        
+        // a strong reference is necessary as the lua call might trigger deletion of the LuaScriptEngine object
+        // avoid overhead by observer_ptr<>::lock as a race on run/destruction never is valid
+        osg::ref_ptr<const LuaScriptEngine> lse(_lse.get());
 
         int topBeforeCall = lua_gettop(lse->getLuaState());
 
